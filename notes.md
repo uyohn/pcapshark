@@ -3,13 +3,13 @@
 ## general
 
 `char errbug[PCAP_ERRBUF_SIZE]`
-*errbuf* is assumed to be able to hold at least `PCAP_ERRBUF_SIZE`
+*errbuf* is assumed to be able to hold at least
+`PCAP_ERRBUF_SIZE` chars
 
 ## finding devices
 
 **read more** `man pcap_findalldevs`
 
-`PCAP_ERRBUF_SIZE` chars.
 `pcap_if_t *alldevs`
 pointer to first device
 
