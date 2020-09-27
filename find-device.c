@@ -1,5 +1,6 @@
 #include <pcap/pcap.h>
 #include <stdio.h>
+#include <string.h>
 
 int main () {
 	// Struct (linked list)
@@ -18,9 +19,48 @@ int main () {
 	// Print the list
 	int i = 1;
 	for (device = alldevs; device != NULL; device = device->next) {
+		char ip[13];
+		char subnet_mask[13];
+		bpf_u_int32 ip_raw;
+		bpf_u_int32 subnet_mask_raw;
+		int lookup_return_code;
+		struct in_addr address;
+
 		printf("%2d. %s", i++, device->name);
 		if (device->description)
 			printf(" - %s", device->description);
+
+		lookup_return_code = pcap_lookupnet(
+			device->name,
+			&ip_raw,
+			&subnet_mask_raw,
+			errbuf
+		);
+
+		if (lookup_return_code == -1) {
+			printf("%s\n", errbuf);
+		}
+
+		// Get IP in human-readable form
+		address.s_addr = ip_raw;
+		strcpy(ip, inet_ntoa(address));
+		if (ip == NULL) {
+			perror("inet_ntoa");
+			return 1;
+		}
+
+		address.s_addr = subnet_mask_raw;
+		strcpy(subnet_mask, inet_ntoa(address));
+		if (subnet_mask == NULL) {
+			perror("inet_ntoa");
+			return 1;
+		}
+
+		printf("\n");
+
+		printf("IP address: %s\n", ip);
+		printf("Subnet mask: %s\n", subnet_mask);
+
 
 		printf("\n");
 	}
