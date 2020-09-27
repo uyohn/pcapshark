@@ -1,8 +1,12 @@
-#include <pcap/pcap.h>
 #include <stdio.h>
 #include <string.h>
+#include <pcap/pcap.h>
+#include <arpa/inet.h>
 
 int main () {
+	// Buffer
+	char buffer[65];
+
 	// Struct (linked list)
 	pcap_if_t *alldevs;
 	pcap_if_t *device;
@@ -61,8 +65,14 @@ int main () {
 		printf("IP address: %s\n", ip);
 		printf("Subnet mask: %s\n", subnet_mask);
 
-
 		printf("\n");
+
+		printf("loopback: %d\n", device->flags & PCAP_IF_LOOPBACK);
+		printf("up: %d\n", device->flags & PCAP_IF_UP);
+		printf("running: %d\n", device->flags & PCAP_IF_RUNNING);
+		printf("wireless: %d\n", device->flags & PCAP_IF_WIRELESS);
+
+		printf("\n\n");
 	}
 
 	if (i == 1) {
