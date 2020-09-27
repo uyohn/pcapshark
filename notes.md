@@ -3,7 +3,7 @@
 ## general
 
 `char errbug[PCAP_ERRBUF_SIZE]`
-*errbuf* is assumed to be able to hold at least
+*errbuf* is assumed to be able to hold at least `PCAP_ERRBUF_SIZE`
 
 ## finding devices
 
