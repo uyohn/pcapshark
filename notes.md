@@ -38,3 +38,45 @@ Each element of addresses is `pcap_addr_t` with these members:
 
 **all ips are IPv4 or IPv6** - check `sa_family` member
 of `struct sockaddr` before interpreting the ip.
+
+to find more info about device, use flags:
+`device->flags & PCAP_IF_<flag>`
+
+available flags:
+
+- `PCAP_IF_LOOPBACK`
+- `PCAP_IF_UP`
+- `PCAP_IF_RUNNING`
+- `PCAP_IF_WIRELESS`
+- `PCAP_IF_CONNECTION_STATUS`
+  - `PCAP_IF_CONNECTION_STATUS_UNKNOWN`
+  - `PCAP_IF_CONNECTION_STATUS_CONNECTED`
+  - `PCAP_IF_CONNECTION_STATUS_DISCONNECTED`
+  - `PCAP_IF_CONNECTION_STATUS_NOT_APPLICABLE` (loopback)
+
+## ip and mask
+
+**read more** `man pcap_lookupnet`, `man inet_ntoa`
+
+### find ip and mask
+
+`pcap_lookupnet` - find ip and subnet mask of device
+params:
+
+- `device` - name of device
+- `&ip_raw` - `bpf_u_int32` (ip as int)
+- `&mask_raw` - `bpf_u_int32` (mask as int)
+- `errbuf`
+
+returns 0 on success, `PCAP_ERROR` on failure.
+
+### convert to human-readable form
+
+`char ip[13], mask[13];`
+`struct in_addr address;`
+
+`address.s_addr = ip_raw;`
+`strcpy(ip, inet_ntoa(address));`
+
+`address.s_addr = mask_raw;`
+`strcpy(mask, inet_ntoa(address));`
