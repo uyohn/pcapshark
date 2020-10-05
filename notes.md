@@ -6,6 +6,8 @@
 *errbuf* is assumed to be able to hold at least
 `PCAP_ERRBUF_SIZE` chars
 
+see `man pcap_geterr`
+
 ## finding devices
 
 **read more** `man pcap_findalldevs`
@@ -80,3 +82,7 @@ returns 0 on success, `PCAP_ERROR` on failure.
 
 `address.s_addr = mask_raw;`
 `strcpy(mask, inet_ntoa(address));`
+
+## `pcap_loop`
+
+see `man pcap_loop`
