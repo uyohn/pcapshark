@@ -1,5 +1,7 @@
 # PcapShark
 
+visit repo for this project: [uyohn/PcapShark](github.com/uyohn/PcapShark)
+
 C program for capturing and analyzing packets.
 
 Written by Matej Rastocky
