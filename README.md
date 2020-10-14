@@ -1,6 +1,6 @@
 # PcapShark
 
-visit repo for this project: [uyohn/PcapShark](github.com/uyohn/PcapShark)
+visit repo for this project: [uyohn/PcapShark](https://www.github.com/uyohn/PcapShark)
 
 C program for capturing and analyzing packets.
 
