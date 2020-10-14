@@ -6,6 +6,10 @@ Written by Matej Rastocky
 
 ## Building
 
+first clone this repo:
+
+`git clone https://github.com/uyohn/PcapShark`
+
 ### Depends on libpcap
 
 build with `gcc <filename> -lpcap`
