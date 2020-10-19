@@ -82,9 +82,14 @@ void free_protocols(protocol *protocols);
 //   MAIN
 // ####################
 
-int main () {
+int main (int argc, char **argv) {
 	// open capture
-	pcap_t *handle = open_capfile("savefile/trace-16.pcap");
+	if (argv[1] == NULL) {
+		printf("supply pcap file path\n");
+		return -1;
+	}
+
+	pcap_t *handle = open_capfile(argv[1]);
 
 	if (handle == NULL)
 		return -1;
