@@ -5,11 +5,23 @@
 #include <pcap/pcap.h>
 #include <stdint.h>
 #include <endian.h>
+#include <string.h>
+
+
+// ####################
+//   CONSTANTS
+// ####################
 
 #define MAC_SIZE 6
 #define ETH_TYPE_SIZE 2
+
 #define CHARS_PER_LINE 32
 #define CHARS_PER_BLOCK 8
+
+
+// ####################
+//   STRUCTS
+// ####################
 
 typedef struct pkt {
 	// meta
@@ -25,8 +37,27 @@ typedef struct pkt {
 	uint16_t *log_header;
 } pkt;
 
+typedef struct protocol {
+	int n;
+	int nstop;
+	char *name;
+} protocol;
+
+typedef struct node {
+	uint32_t node_ip;
+	unsigned int nreceived;
+	struct node *next;
+} node;
+
+// #################
+//   GLOBALS
+// #################
+
 int frame_no = 1;
 
+protocol *ethernetII_protocols, *eth802_3_protocols;
+
+node *start = NULL;
 
 
 // ####################
@@ -40,6 +71,11 @@ void print_mac       (uint8_t *start);
 void hexdump         (uint8_t *data, unsigned int n);
 void print_ethertype (u_int16_t *eth_type, u_int16_t *log_header);
 
+protocol *load_protocols(char *srcfile);
+void print_ethernetII_subprotocol(protocol *protocols, uint16_t eth_type);
+void print_802_3_subprotocol (protocol *protocols, uint8_t LSAP);
+void free_protocols(protocol *protocols);
+
 
 
 // ####################
@@ -48,10 +84,14 @@ void print_ethertype (u_int16_t *eth_type, u_int16_t *log_header);
 
 int main () {
 	// open capture
-	pcap_t *handle = open_capfile("savefile/trace-26.pcap");
+	pcap_t *handle = open_capfile("savefile/trace-16.pcap");
 
 	if (handle == NULL)
 		return -1;
+
+	// load subprotocols
+	ethernetII_protocols = load_protocols("source/ethernetII_protocols.txt");
+	eth802_3_protocols = load_protocols("source/802-3_protocols.txt");
 
 
 	// start packet processing loop
@@ -61,6 +101,8 @@ int main () {
 	}
 
 
+
+	free_protocols(ethernetII_protocols);
 	return 0;
 }
 
@@ -187,14 +229,16 @@ void hexdump (uint8_t *data, unsigned int n) {
 	}
 }
 
-void print_ethertype (u_int16_t *eth_type, u_int16_t *log_header) {
+void print_ethertype (uint16_t *eth_type, uint16_t *log_header) {
     FILE *eth_types = fopen("source/eth_types.txt", "r");
     int eth_num = 0;
 	
     char c;
 
-    if ( be16toh(*eth_type) >= 1500 )
-        printf("Ethernet II");
+    if ( be16toh(*eth_type) >= 1500 ) {
+        printf("Ethernet II: ");
+		print_ethernetII_subprotocol(ethernetII_protocols, be16toh(*eth_type));
+	}
     else
         while (1) {
             fscanf(eth_types, "%d", &eth_num);
@@ -206,6 +250,8 @@ void print_ethertype (u_int16_t *eth_type, u_int16_t *log_header) {
 				for (int i = 0; (c = getc(eth_types)) != '\n'; i++)
 					printf("%c", c);
 
+				printf(": ");
+				print_802_3_subprotocol(eth802_3_protocols, eth_num);
 				break;
             } else if (eth_num == 0) {
 				getc(eth_types);  // skip one space
@@ -213,6 +259,8 @@ void print_ethertype (u_int16_t *eth_type, u_int16_t *log_header) {
 				for (int i = 0; (c = getc(eth_types)) != '\n'; i++)
 					printf("%c", c);
 
+				printf(": ");
+				print_802_3_subprotocol(eth802_3_protocols, *((uint8_t *)log_header));
 				break;
             }
             else
@@ -220,4 +268,95 @@ void print_ethertype (u_int16_t *eth_type, u_int16_t *log_header) {
         }
     
     fclose(eth_types);
+}
+
+protocol *load_protocols(char *srcfile) {
+	// file with protocols
+	// 0000-ffff#name of protocol in human readable form\n
+	FILE *source = fopen(srcfile, "r");
+
+	// prepare protocols array
+	protocol *protocols = malloc(500 * sizeof(protocol));
+	int pi = 0;
+
+	char c;
+	char *buffer = malloc(300 * sizeof(char));
+
+	// while there are more lines load first number
+	while( fscanf(source, "%x", &protocols[pi].n ) != EOF) {
+		// if there is - after first num, it is a range, so load second num as well
+		if ((c = fgetc(source)) == '-'){
+			fscanf(source, "%x", &protocols[pi].nstop);
+			c = fgetc(source); // load next char
+		} else
+			protocols[pi].nstop = -1; // if it is not a range, set nstop to -1
+		
+		// if next char is #, load protocol name into buffer
+		if (c == '#') {
+			int i = 0;
+
+			// load chars into buffer until \n
+			while((c = fgetc(source)) != '\n')
+				buffer[i++] = c;
+
+			// terminate the string
+			buffer[i++] = '\0';
+
+			// alloc space for protocol name
+			protocols[pi].name = malloc(i * sizeof(char));
+			// copy the name
+			strcpy(protocols[pi].name, buffer);
+		}
+
+		// increment protocol i
+		pi++;
+	}
+
+	free(buffer);
+	return protocols;
+}
+
+// TODO: refactor this mess
+void print_ethernetII_subprotocol (protocol *protocols, uint16_t eth_type) {
+	int i = 0;
+	while (1) {
+		if (protocols[i].n < eth_type) {
+			i++;
+		} else {
+			if (protocols[i].n <= eth_type &&
+				protocols[i].nstop != -1 &&
+				protocols[i].nstop >= eth_type) {
+					printf("%s", protocols[i].name);
+					return;
+			} else if (protocols[i].n <= eth_type) {
+				printf("%s", protocols[i].name);
+				return;
+			} else {
+				printf("subprotocol unnamed");
+				return;
+			};
+		}
+
+		// safestop
+		if (i > 0xFFFF)
+			break;
+	}
+}
+
+void print_802_3_subprotocol (protocol *protocols, uint8_t LSAP) {
+	int i = 0;
+	while (protocols[i].n != LSAP) {
+		i++;
+		if (i > 0xFF) {
+			printf("subprotocol not found");
+			return;
+		}
+	}
+
+	printf("%s", protocols[i].name);
+}
+
+// TODO: free names of protocols first (at least 2MB leak)
+void free_protocols (protocol *protocols) {
+	free(protocols);
 }
