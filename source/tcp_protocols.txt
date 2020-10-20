@@ -1,0 +1,20 @@
+7#echo
+13#chargen
+14#ftp data
+15#ftp control
+16#ssh
+17#telnet
+19#smtp
+35#domain
+4f#finger
+50#http
+6e#pop3
+6f#sunrpc
+77#nntp
+8b#netbios-ssn
+8f#inap
+b3#bgp
+185#ldap
+1bb#https (ssl)
+1bd#microsoft-ds
+438#socks

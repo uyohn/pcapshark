@@ -69,7 +69,11 @@ typedef struct ipv4_stats {
 
 int frame_no = 1;
 
-protocol *ethernetII_protocols, *eth802_3_protocols, *ipv4_protocols;
+protocol *ethernetII_protocols,
+		 *eth802_3_protocols,
+		 *ipv4_protocols,
+		 *tcp_protocols,
+		 *udp_protocols;
 
 ipv4_stats src_ips[100], dst_ips[100];
 unsigned int *src_ips_count, *dst_ips_count;
@@ -92,6 +96,8 @@ protocol *load_protocols(char *srcfile);
 void print_ethernetII_subprotocol(protocol *protocols, uint16_t eth_type);
 void print_802_3_subprotocol (protocol *protocols, uint8_t LSAP);
 void print_ipv4_subprotocol (protocol *protocols, uint8_t n);
+void print_tcp_protocol(protocol *protocols, uint16_t port);
+void print_udp_protocol(protocol *protocols, uint16_t port);
 void free_protocols(protocol *protocols);
 void print_ipv4_stats();
 
@@ -117,6 +123,8 @@ int main (int argc, char **argv) {
 	ethernetII_protocols = load_protocols("source/ethernetII_protocols.txt");
 	eth802_3_protocols = load_protocols("source/802-3_protocols.txt");
 	ipv4_protocols = load_protocols("source/ipv4_protocols.txt");
+	tcp_protocols = load_protocols("source/tcp_protocols.txt");
+	udp_protocols = load_protocols("source/udp_protocols.txt");
 
 	// prepare statistics
 	//TODO
@@ -299,7 +307,6 @@ void print_ethertype (uint16_t *eth_type, uint16_t *log_header) {
 
 				if (*src_ips_count < 99) {
 					src_ips[(*src_ips_count)++].ip = (*header.src_addr);
-					printf("ip is: %d\n", src_ips[*src_ips_count - 1].ip);
 				}
 			} else {
 				int i;
@@ -351,7 +358,21 @@ void print_ethertype (uint16_t *eth_type, uint16_t *log_header) {
 			printf("ttl: %d, ", *header.ttl);
 			print_ipv4_subprotocol(ipv4_protocols, *((uint8_t *)header.protocol));
 
-			printf("\nSrc ip addr: %d.%d.%d.%d, Dst ip addr: %d.%d.%d.%d",
+			// print tcp protocol
+			uint8_t ipv4_header_len = *((uint8_t *)(log_header)) & 0xf;
+			ipv4_header_len *= 2; // 32-bit words
+			uint16_t dst_port = be16toh(*((uint16_t *)(log_header) + ipv4_header_len + 1 ));
+			uint16_t src_port = be16toh(*((uint16_t *)(log_header) + ipv4_header_len ));
+
+			printf(": ");
+			if ( *((uint8_t *)header.protocol) == 0x06)
+				print_tcp_protocol(tcp_protocols, dst_port);
+			else if ( *((uint8_t *)header.protocol) == 0x11)
+				print_udp_protocol(udp_protocols, dst_port);
+
+			printf("\nSrc port: %d, Dst port: %d\n", src_port, dst_port);
+
+			printf("Src ip addr: %d.%d.%d.%d, Dst ip addr: %d.%d.%d.%d",
 					*((uint8_t *)header.src_addr + 0),
 					*((uint8_t *)header.src_addr + 1),
 					*((uint8_t *)header.src_addr + 2),
@@ -442,6 +463,7 @@ protocol *load_protocols(char *srcfile) {
 }
 
 // TODO: refactor this mess
+// THERE SHOULD ONLY BE 1 FUNCTION FOR ALL OF THEESEEEEEE
 void print_ethernetII_subprotocol (protocol *protocols, uint16_t eth_type) {
 	int i = 0;
 	while (1) {
@@ -505,6 +527,32 @@ void print_ipv4_subprotocol (protocol *protocols, uint8_t n) {
 		if (i > 0xFF)
 			break;
 	}
+}
+
+void print_tcp_protocol(protocol *protocols, uint16_t port) {
+	int i = 0;
+	while (protocols[i].n != port) {
+		i++;
+		if (i > 0xFF) {
+			printf("subprotocol not found");
+			return;
+		}
+	}
+
+	printf("%s", protocols[i].name);
+}
+
+void print_udp_protocol(protocol *protocols, uint16_t port) {
+	int i = 0;
+	while (protocols[i].n != port) {
+		i++;
+		if (i > 0xFF) {
+			printf("subprotocol not found");
+			return;
+		}
+	}
+
+	printf("%s", protocols[i].name);
 }
 
 // TODO: free names of protocols first (at least 2MB leak)

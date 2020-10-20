@@ -1,0 +1,14 @@
+7#echo
+13#chargen
+25#time
+35#domain
+43#bootps
+44#bootpc
+45#tftp
+89#netbios-ns
+8a#snmp
+8b#snmp-trap
+a2#isakmp
+1f4#syslog
+208#rip
+829a#traceroute
