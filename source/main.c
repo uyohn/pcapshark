@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <endian.h>
 #include <string.h>
+#include <sys/types.h>
 
 
 // ####################
@@ -49,13 +50,29 @@ typedef struct node {
 	struct node *next;
 } node;
 
+typedef struct ip_header {
+	uint8_t *ip_header_start;
+	uint8_t *ttl;
+	uint8_t *protocol;
+	uint32_t *src_addr;
+	uint32_t *dst_addr;
+} ip_header;
+
+typedef struct ipv4_stats {
+	uint32_t ip;
+	unsigned int count;
+} ipv4_stats;
+
 // #################
 //   GLOBALS
 // #################
 
 int frame_no = 1;
 
-protocol *ethernetII_protocols, *eth802_3_protocols;
+protocol *ethernetII_protocols, *eth802_3_protocols, *ipv4_protocols;
+
+ipv4_stats src_ips[100], dst_ips[100];
+unsigned int *src_ips_count, *dst_ips_count;
 
 node *start = NULL;
 
@@ -74,7 +91,9 @@ void print_ethertype (u_int16_t *eth_type, u_int16_t *log_header);
 protocol *load_protocols(char *srcfile);
 void print_ethernetII_subprotocol(protocol *protocols, uint16_t eth_type);
 void print_802_3_subprotocol (protocol *protocols, uint8_t LSAP);
+void print_ipv4_subprotocol (protocol *protocols, uint8_t n);
 void free_protocols(protocol *protocols);
+void print_ipv4_stats();
 
 
 
@@ -97,7 +116,14 @@ int main (int argc, char **argv) {
 	// load subprotocols
 	ethernetII_protocols = load_protocols("source/ethernetII_protocols.txt");
 	eth802_3_protocols = load_protocols("source/802-3_protocols.txt");
+	ipv4_protocols = load_protocols("source/ipv4_protocols.txt");
 
+	// prepare statistics
+	//TODO
+	src_ips_count = malloc(sizeof(unsigned int));
+	dst_ips_count = malloc(sizeof(unsigned int));
+	*src_ips_count = *dst_ips_count = 0;
+	
 
 	// start packet processing loop
 	if ( pcap_loop(handle, 0, packetHandler, NULL) < 0 ) {
@@ -105,9 +131,18 @@ int main (int argc, char **argv) {
 		return -2;
 	}
 
+	// print ipv4 stats
+	print_ipv4_stats();
 
 
+	// cleanup
 	free_protocols(ethernetII_protocols);
+	free_protocols(eth802_3_protocols);
+	free_protocols(ipv4_protocols);
+
+	free(src_ips_count);
+	free(dst_ips_count);
+
 	return 0;
 }
 
@@ -128,7 +163,6 @@ void packetHandler (u_char *userData, const struct pcap_pkthdr *pkthdr, const u_
 	current.src_mac    = (uint8_t *)  (packet + MAC_SIZE);
 	current.eth_type   = (uint16_t *) (packet + 2 * MAC_SIZE);
 	current.log_header = (uint16_t *) (packet + 2 * MAC_SIZE + 2);
-
 	
 	
 	// print packet info
@@ -159,10 +193,10 @@ void print_pkt(pkt packet) {
 
 	print_ethertype(packet.eth_type, packet.log_header);
 
-	printf(", Src: ");
+	printf("\nSrc mac: ");
 	print_mac(packet.src_mac);
 
-	printf(", Dst: ");
+	printf(", Dst mac: ");
 	print_mac(packet.dst_mac);
 	printf("\n");
 
@@ -234,6 +268,7 @@ void hexdump (uint8_t *data, unsigned int n) {
 	}
 }
 
+// TODO: refactor this shit to be more modular
 void print_ethertype (uint16_t *eth_type, uint16_t *log_header) {
     FILE *eth_types = fopen("source/eth_types.txt", "r");
     int eth_num = 0;
@@ -242,7 +277,92 @@ void print_ethertype (uint16_t *eth_type, uint16_t *log_header) {
 
     if ( be16toh(*eth_type) >= 1500 ) {
         printf("Ethernet II: ");
-		print_ethernetII_subprotocol(ethernetII_protocols, be16toh(*eth_type));
+
+		// special behaviour for ipv4 packets:
+		if (be16toh(*eth_type) == 0x0800) {
+			printf("Internet Protocol version 4 (IPv4)\n");
+
+			ip_header header;
+			header.ip_header_start = (uint8_t *) log_header;
+			// in ethII packets log header points to first B of data
+
+			header.ttl = (uint8_t *)(header.ip_header_start + 8);
+			header.protocol = (uint8_t *)(header.ip_header_start + 9);
+			header.src_addr = (uint32_t *)(header.ip_header_start + 12);
+			header.dst_addr = (uint32_t *)(header.ip_header_start + 16);
+
+			// stats
+			// TODO: THIS IS UTTER SHIT
+			// SRC
+			if (*src_ips_count == 0) {
+				src_ips[*src_ips_count].count = 1;
+
+				if (*src_ips_count < 99) {
+					src_ips[(*src_ips_count)++].ip = (*header.src_addr);
+					printf("ip is: %d\n", src_ips[*src_ips_count - 1].ip);
+				}
+			} else {
+				int i;
+				for (i = 0; i < *src_ips_count; i++)
+					if (src_ips[i].ip == (*header.src_addr))
+						break;
+
+				if (i == *src_ips_count) {
+					if (src_ips[i].ip == (*header.src_addr))
+						src_ips[i].count += 1;
+					else {
+						src_ips[*src_ips_count].count = 1;
+
+						if (*src_ips_count < 99) {
+							src_ips[(*src_ips_count)++].ip = (*header.src_addr);
+							printf("ip is: %d\n", src_ips[*src_ips_count - 1].ip);
+						}
+					}
+				} else {
+					src_ips[i].count += 1;
+				}
+			}
+			// DST
+			if (*dst_ips_count == 0) {
+				dst_ips[*dst_ips_count].count = 1;
+
+				if (*dst_ips_count < 99)
+					dst_ips[(*dst_ips_count)++].ip = (*header.dst_addr);
+			} else {
+				int i;
+				for (i = 0; i < *dst_ips_count; i++)
+					if (dst_ips[i].ip == (*header.dst_addr))
+						break;
+
+				if (i == *dst_ips_count) {
+					if (dst_ips[i].ip == (*header.dst_addr))
+						dst_ips[i].count += 1;
+					else {
+						dst_ips[*dst_ips_count].count = 1;
+
+						if (*dst_ips_count < 99)
+							dst_ips[(*dst_ips_count)++].ip = (*header.dst_addr);
+					}
+				} else {
+					dst_ips[i].count += 1;
+				}
+			}
+
+			printf("ttl: %d, ", *header.ttl);
+			print_ipv4_subprotocol(ipv4_protocols, *((uint8_t *)header.protocol));
+
+			printf("\nSrc ip addr: %d.%d.%d.%d, Dst ip addr: %d.%d.%d.%d",
+					*((uint8_t *)header.src_addr + 0),
+					*((uint8_t *)header.src_addr + 1),
+					*((uint8_t *)header.src_addr + 2),
+					*((uint8_t *)header.src_addr + 3),
+					*((uint8_t *)header.dst_addr + 0),
+					*((uint8_t *)header.dst_addr + 1),
+					*((uint8_t *)header.dst_addr + 2),
+					*((uint8_t *)header.dst_addr + 3));
+
+		} else
+			print_ethernetII_subprotocol(ethernetII_protocols, be16toh(*eth_type));
 	}
     else
         while (1) {
@@ -361,7 +481,77 @@ void print_802_3_subprotocol (protocol *protocols, uint8_t LSAP) {
 	printf("%s", protocols[i].name);
 }
 
+void print_ipv4_subprotocol (protocol *protocols, uint8_t n) {
+	int i = 0;
+	while (1) {
+		if (protocols[i].n < n) {
+			i++;
+		} else {
+			if (protocols[i].n <= n &&
+				protocols[i].nstop != -1 &&
+				protocols[i].nstop >= n) {
+					printf("%s", protocols[i].name);
+					return;
+			} else if (protocols[i].n <= n) {
+				printf("%s", protocols[i].name);
+				return;
+			} else {
+				printf("subprotocol unnamed");
+				return;
+			};
+		}
+
+		// safestop
+		if (i > 0xFF)
+			break;
+	}
+}
+
 // TODO: free names of protocols first (at least 2MB leak)
 void free_protocols (protocol *protocols) {
 	free(protocols);
+}
+
+void print_ipv4_stats() {
+	printf("\n\nSource IPv4 Addresses:\n");
+	int max = 0;
+	for (int i = 0; i < *src_ips_count; i++) {
+		printf("%d * %d.%d.%d.%d\n",
+				src_ips[i].count,
+				*((uint8_t *)(&src_ips[i].ip) + 0),
+				*((uint8_t *)(&src_ips[i].ip) + 1),
+				*((uint8_t *)(&src_ips[i].ip) + 2),
+				*((uint8_t *)(&src_ips[i].ip) + 3));
+
+		if (src_ips[max].count < src_ips[i].count)
+			max = i;
+	}
+
+	printf("max packets sent: %d by %d.%d.%d.%d\n",
+		src_ips[max].count,
+		*((uint8_t *)(&src_ips[max].ip) + 0),
+		*((uint8_t *)(&src_ips[max].ip) + 1),
+		*((uint8_t *)(&src_ips[max].ip) + 2),
+		*((uint8_t *)(&src_ips[max].ip) + 3));
+
+	max = 0;
+	printf("\n\nDestination IPv4 Addresses:\n");
+	for (int i = 0; i < *dst_ips_count; i++) {
+		printf("%d * %d.%d.%d.%d\n",
+				dst_ips[i].count,
+				*((uint8_t *)(&dst_ips[i].ip) + 0),
+				*((uint8_t *)(&dst_ips[i].ip) + 1),
+				*((uint8_t *)(&dst_ips[i].ip) + 2),
+				*((uint8_t *)(&dst_ips[i].ip) + 3));
+
+		if (dst_ips[max].count < dst_ips[i].count)
+			max = i;
+	}
+
+	printf("max packets received: %d by %d.%d.%d.%d\n",
+		dst_ips[max].count,
+		*((uint8_t *)(&dst_ips[max].ip) + 0),
+		*((uint8_t *)(&dst_ips[max].ip) + 1),
+		*((uint8_t *)(&dst_ips[max].ip) + 2),
+		*((uint8_t *)(&dst_ips[max].ip) + 3));
 }
