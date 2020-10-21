@@ -322,7 +322,6 @@ void print_ethertype (uint16_t *eth_type, uint16_t *log_header) {
 
 						if (*src_ips_count < 99) {
 							src_ips[(*src_ips_count)++].ip = (*header.src_addr);
-							printf("ip is: %d\n", src_ips[*src_ips_count - 1].ip);
 						}
 					}
 				} else {
