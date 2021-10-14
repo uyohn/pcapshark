@@ -2,7 +2,7 @@
 
 ## Update
 
-For Winter Semester 2021/2022 check `v2.c`
+For Winter Semester 2021/2022 check `v2.c`  
 `main.c` is legacy code from last year
 makefile is setup for compiling `v2.c`
  
