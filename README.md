@@ -5,7 +5,7 @@
 For Winter Semester 2021/2022 check `v2.c`  
 `main.c` is legacy code from last year  
   
-makefile is already prepared for comiling `v2.c`  
+makefile is already prepared for compiling `v2.c`  
 so all you need to do is run `make` from terminal
  
 ---
