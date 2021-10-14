@@ -1,5 +1,13 @@
 # PcapShark
 
+## Update
+
+For Winter Semester 2021/2022 check `v2.c`
+`main.c` is legacy code from last year
+makefile is setup for compiling `v2.c`
+ 
+---
+ 
 visit repo for this project: [uyohn/PcapShark](https://www.github.com/uyohn/PcapShark)
 
 C program for capturing and analyzing packets.

@@ -4,6 +4,6 @@ SRCDIR=source
 BUILDDIR=build
 
 run: main
-	./$(BUILDDIR)/main savefile/trace-1.pcap
+	./$(BUILDDIR)/main savefile/trace-2.pcap
 main:
-	gcc -o $(BUILDDIR)/main $(SRCDIR)/main.c -lpcap
+	gcc -o $(BUILDDIR)/main $(SRCDIR)/v2.c $(SRCDIR)/pcap-shark.c -lpcap
