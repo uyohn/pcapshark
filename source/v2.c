@@ -2,6 +2,7 @@
 // V2 - version for Winter Semester 2021/2022
 // refactor of code from last year
 
+#include <endian.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <pcap/pcap.h>
@@ -17,7 +18,11 @@
 int pkt_order = 1; 	// frame counter
 pcap_t *fp; 		// pointer to capfile file
 
-
+protocol *ethernetII_protocols,
+		 *eth802_3_protocols,
+		 *ipv4_protocols,
+		 *tcp_protocols,
+		 *udp_protocols;
 
 
 // -----------------------
@@ -47,6 +52,14 @@ int main (int argc, char **argv) {
 	fp = handle;
 
 
+	// load protocols from files
+	ethernetII_protocols = load_protocols("source/ethernetII_protocols.txt");
+	eth802_3_protocols = load_protocols("source/802-3_protocols.txt");
+	ipv4_protocols = load_protocols("source/ipv4_protocols.txt");
+	tcp_protocols = load_protocols("source/tcp_protocols.txt");
+	udp_protocols = load_protocols("source/udp_protocols.txt");
+
+
 
 	// --------------------
 	// MAIN
@@ -62,22 +75,54 @@ int main (int argc, char **argv) {
 	// --------------------
 	// CLEAN UP
 
+	free_protocols(ethernetII_protocols);
+	free_protocols(eth802_3_protocols);
+	free_protocols(ipv4_protocols);
+
+
 	return 0;
 }
 
 void packetHandler (u_char *serData, const struct pcap_pkthdr *pkthdr, const u_char *packet) {
-	pkt current;
 
-	current.order 		= pkt_order++;
-	current.len 		= pkthdr->len;
+	// TODO: don't alloc memory for each frame one-by-one
+	pkt *current = (pkt *) malloc(sizeof(pkt));
 
-	current.dst_mac 	= (uint8_t *) (packet);
-	current.src_mac 	= (uint8_t *) (packet + MAC_SIZE);
+	// TODO: maybe cleanup this?
+	current->start 		= packet;
+	current->order 		= pkt_order++;
+	current->len 		= pkthdr->len;
 
-	current.eth_type	= (uint16_t *) (packet + 2 * MAC_SIZE);
-	current.log_header	= (uint16_t *) (packet + 2 * MAC_SIZE + 2);
+	// parse the frame layer-by-layer
+	parse_link_layer(current);
 
-	print_pkt(current);
+
+	if ( be16toh(*current->eth_type) >= 1500) {
+		// ETH II frame
+		parse_ethii(current);
+
+
+	} else if ( (uint8_t) *current->log_header == 0xFF ) {
+		// 802.3 RAW
+		*current->eth_type = 0xFF;
+		
+	} else if ( (uint8_t) *current->log_header == 0xAA ) {
+		// 802.3 LLC + SNAP
+
+		// update eth_type to reflect velue from SNAP header
+		*current->eth_type = 0xAA;
+
+		parse_ieee_snap(current);
+	
+	} else {
+		// 802.3 LLC
+
+	}
+
+	print_pkt(*current);
+
+	// CLEANUP
+	free(current);
 }
 
 

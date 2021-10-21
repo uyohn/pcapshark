@@ -1,3 +1,3 @@
-65535 IEEE 802.3 Novell RAW (Novell properietary)
-43690 IEEE 802.3 LLC + SNAP
-0 IEEE 802.3 LLC
+0xFF IEEE 802.3 Novell RAW (Novell properietary)
+0xAA IEEE 802.3 LLC + SNAP
+0x0 IEEE 802.3 LLC
