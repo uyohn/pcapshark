@@ -69,12 +69,6 @@ typedef struct ipv4_stats {
 
 int frame_no = 1;
 
-protocol *ethernetII_protocols,
-		 *eth802_3_protocols,
-		 *ipv4_protocols,
-		 *tcp_protocols,
-		 *udp_protocols;
-
 ipv4_stats src_ips[100], dst_ips[100];
 unsigned int *src_ips_count, *dst_ips_count;
 
@@ -130,7 +124,8 @@ int main (int argc, char **argv) {
 	//TODO
 	src_ips_count = malloc(sizeof(unsigned int));
 	dst_ips_count = malloc(sizeof(unsigned int));
-	*src_ips_count = *dst_ips_count = 0;
+	*src_ips_count = 0;
+	*dst_ips_count = 0;
 	
 
 	// start packet processing loop

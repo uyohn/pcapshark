@@ -28,6 +28,7 @@ protocol *load_protocols(char *srcfile) {
 	// 0000-ffff#name of protocol in human readable form\n
 	FILE *source = fopen(srcfile, "r");
 
+	return NULL;
 	// prepare protocols array
 	protocol *protocols = malloc(500 * sizeof(protocol));
 	int pi = 0;
@@ -66,6 +67,7 @@ protocol *load_protocols(char *srcfile) {
 	}
 
 	free(buffer);
+	fclose(source);
 	return protocols;
 }
 
@@ -75,11 +77,11 @@ void free_protocols (protocol *protocols) {
 }
 
 // prints info about a packet in a nice way
-void print_pkt (pkt pkt) {
-	printf("Frame %d: ", pkt.order);
+void print_pkt (pkt *pkt) {
+	printf("\n\n\nFrame %d: ", pkt->order);
 
-	printf("%d bytes on wire (%d bits), ", pkt.real_len, pkt.real_len * 8);
-	printf("%d bytes captured (%d bits), ", pkt.len, pkt.len * 8);
+	printf("%d bytes on wire (%d bits), ", pkt->real_len, pkt->real_len * 8);
+	printf("%d bytes captured (%d bits), ", pkt->len, pkt->len * 8);
 
 	printf("\n");
 
@@ -87,17 +89,17 @@ void print_pkt (pkt pkt) {
 	print_eth_name(pkt);
 
 	printf("Src mac: ");
-	print_mac(pkt.src_mac);
+	print_mac(pkt->src_mac);
 
 	printf(", Dst mac: ");
-	print_mac(pkt.dst_mac);
+	print_mac(pkt->dst_mac);
 	
 	printf("\n");
 
 	printf("\n");
-	hexdump(pkt.dst_mac, pkt.len);
+	hexdump(pkt->dst_mac, pkt->len);
 
-	printf("\n\n\n\n");
+	printf("\n");
 }
 
 // will print the binary data in nice way
@@ -162,12 +164,12 @@ void print_mac (uint8_t *start) {
 	printf("%02x", *(start + i));
 }
 
-void print_eth_name (pkt pkt) {
+void print_eth_name (pkt *pkt) {
 	// PRINT FRAME TYPE
 
 	// The max size of eth frame is 1500 bytes,
 	// so if > 1500, it has to be ETH II
-	if ( *pkt.eth_type >= 1500) {
+	if ( pkt->eth_type >= 1500) {
 		
 		printf("Ethernet II frame");
 	
@@ -182,8 +184,9 @@ void print_eth_name (pkt pkt) {
 			fscanf(eth_types, "%x", &eth_num);
 			getc(eth_types); // skip one char  (space)
 
-			if (eth_num == *pkt.eth_type) { // 802.3 Novell RAW / LLC + SNAP
-				
+
+			if (eth_num == pkt->ssap ) { // 802.3 Novell RAW / LLC + SNAP
+
 				for (int i = 0; (c = getc(eth_types)) != '\n'; i++)
 					printf("%c", c);
 				
@@ -213,8 +216,9 @@ void parse_link_layer (pkt *pkt) {
 	pkt->dst_mac 	= (uint8_t *) (pkt->start);
 	pkt->src_mac 	= (uint8_t *) (pkt->start + MAC_SIZE);
 
-	pkt->eth_type	= (uint16_t *) (pkt->start + 2 * MAC_SIZE);
+	pkt->eth_type	= be16toh(*(uint16_t *) (pkt->start + 2 * MAC_SIZE));
 	pkt->log_header	= (uint8_t *) (pkt->start + 2 * MAC_SIZE + 2);
+	pkt->ssap		= *((uint8_t *) (pkt->start + 2 * MAC_SIZE + 2));
 
 }
 
@@ -226,16 +230,200 @@ void parse_ieee_snap (pkt *pkt) {
 }
 
 
-void parse_ethii (pkt *pkt) {
-	if (be16toh(*pkt->eth_type) == 0x0800) {
+void parse_ethii (pkt *pkt, ipv4_stats *src_ips, ipv4_stats *dst_ips, unsigned int *src_ips_count, unsigned int *dst_ips_count) {
+	if (pkt->eth_type == 0x0800) {
+		/*
 		// ipv4
+		printf("Internet Protocol version 4 (IPv4)\n");
 
 		// parse data
+		ip_header header;
+		header.ip_header_start = (uint8_t *) pkt->log_header;
+		// in ethII packets log header points to first B of data
 
-			// if TCP / UDP parse again
+		header.ttl = (uint8_t *)(header.ip_header_start + 8);
+		header.protocol = (uint8_t *)(header.ip_header_start + 9);
+		header.src_addr = (uint32_t *)(header.ip_header_start + 12);
+		header.dst_addr = (uint32_t *)(header.ip_header_start + 16);
 
 		// stats
+		// TODO: THIS IS UTTER SHIT
+		// SRC
+		if (*src_ips_count == 0) {
+			src_ips[*src_ips_count].count = 1;
+
+			if (*src_ips_count < 99) {
+				src_ips[(*src_ips_count)++].ip = (*header.src_addr);
+			}
+		} else {
+			int i;
+			for (i = 0; i < *src_ips_count; i++)
+				if (src_ips[i].ip == (*header.src_addr))
+					break;
+
+			if (i == *src_ips_count) {
+				if (src_ips[i].ip == (*header.src_addr))
+					src_ips[i].count += 1;
+				else {
+					src_ips[*src_ips_count].count = 1;
+
+					if (*src_ips_count < 99) {
+						src_ips[(*src_ips_count)++].ip = (*header.src_addr);
+					}
+				}
+			} else {
+				src_ips[i].count += 1;
+			}
+		}
+		
+		// DST
+		if (*dst_ips_count == 0) {
+			dst_ips[*dst_ips_count].count = 1;
+
+			if (*dst_ips_count < 99)
+				dst_ips[(*dst_ips_count)++].ip = (*header.dst_addr);
+		} else {
+			int i;
+			for (i = 0; i < *dst_ips_count; i++)
+				if (dst_ips[i].ip == (*header.dst_addr))
+					break;
+
+			if (i == *dst_ips_count) {
+				if (dst_ips[i].ip == (*header.dst_addr))
+					dst_ips[i].count += 1;
+				else {
+					dst_ips[*dst_ips_count].count = 1;
+
+					if (*dst_ips_count < 99)
+						dst_ips[(*dst_ips_count)++].ip = (*header.dst_addr);
+				}
+			} else {
+				dst_ips[i].count += 1;
+			}
+		}
+		
+
+		printf("ttl: %d, ", *header.ttl);
+
+		protocol *ipv4_protocols = load_protocols("source/ipv4_protocols.txt");
+		protocol *tcp_protocols = load_protocols("source/tcp_protocols.txt");
+		protocol *udp_protocols = load_protocols("source/udp_protocols.txt");
+
+		print_ipv4_subprotocol(ipv4_protocols, *((uint8_t *)header.protocol));
+
+		// print tcp protocol
+		uint8_t ipv4_header_len = *((uint8_t *)(pkt->log_header)) & 0xf;
+		ipv4_header_len *= 2; // 32-bit words
+		uint16_t dst_port = be16toh(*((uint16_t *)(pkt->log_header) + ipv4_header_len + 1 ));
+		uint16_t src_port = be16toh(*((uint16_t *)(pkt->log_header) + ipv4_header_len ));
+
+		printf(": ");
+		if ( *((uint8_t *)header.protocol) == 0x06)
+			print_tcp_protocol(tcp_protocols, dst_port);
+		else if ( *((uint8_t *)header.protocol) == 0x11)
+			print_udp_protocol(udp_protocols, dst_port);
+
+		printf("\nSrc port: %d, Dst port: %d\n", src_port, dst_port);
+
+		printf("Src ip addr: %d.%d.%d.%d, Dst ip addr: %d.%d.%d.%d",
+				*((uint8_t *)header.src_addr + 0),
+				*((uint8_t *)header.src_addr + 1),
+				*((uint8_t *)header.src_addr + 2),
+				*((uint8_t *)header.src_addr + 3),
+				*((uint8_t *)header.dst_addr + 0),
+				*((uint8_t *)header.dst_addr + 1),
+				*((uint8_t *)header.dst_addr + 2),
+				*((uint8_t *)header.dst_addr + 3));
+
+
+		// stats
+		*/
 	} else {
 		// just print subprotocol
+		print_trans_protocol(pkt);
 	}
 }
+
+void print_trans_protocol (pkt *pkt) {
+	protocol *protocols = load_protocols("source/ethernetII_protocols.txt");
+
+	int i = 0;
+	/*while (1) {
+		if (protocols[i].n < pkt->eth_type) {
+			i++;
+		} else {
+			if (protocols[i].n <= pkt->eth_type &&
+				protocols[i].nstop != -1 &&
+				protocols[i].nstop >= pkt->eth_type) {
+					printf("%s", protocols[i].name);
+					return;
+			} else if (protocols[i].n <= pkt->eth_type) {
+				printf("%s", protocols[i].name);
+				return;
+			} else {
+				printf("subprotocol unnamed");
+				return;
+			};
+		}
+
+		// safestop
+		if (i > 0xFFFF)
+			break;
+	}
+	*/
+
+}
+
+
+void print_ipv4_subprotocol (protocol *protocols, uint8_t n) {
+	int i = 0;
+	while (1) {
+		if (protocols[i].n < n) {
+			i++;
+		} else {
+			if (protocols[i].n <= n &&
+				protocols[i].nstop != -1 &&
+				protocols[i].nstop >= n) {
+					printf("%s", protocols[i].name);
+					return;
+			} else if (protocols[i].n <= n) {
+				printf("%s", protocols[i].name);
+				return;
+			} else {
+				printf("subprotocol unnamed");
+				return;
+			};
+		}
+
+		// safestop
+		if (i > 0xFF)
+			break;
+	}
+}
+
+void print_tcp_protocol(protocol *protocols, uint16_t port) {
+	int i = 0;
+	while (protocols[i].n != port) {
+		i++;
+		if (i > 0xFF) {
+			printf("subprotocol not found");
+			return;
+		}
+	}
+
+	printf("%s", protocols[i].name);
+}
+
+void print_udp_protocol(protocol *protocols, uint16_t port) {
+	int i = 0;
+	while (protocols[i].n != port) {
+		i++;
+		if (i > 0xFF) {
+			printf("subprotocol not found");
+			return;
+		}
+	}
+
+	printf("%s", protocols[i].name);
+}
+
