@@ -3,6 +3,7 @@
 // refactor of code from last year
 
 #include <endian.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <pcap/pcap.h>
@@ -432,7 +433,7 @@ void parse_ethii (pkt *pkt, ipv4_stats *src_ips, ipv4_stats *dst_ips, unsigned i
 		header.dst_addr = (uint32_t *)(header.ip_header_start + 16);
 
 		// stats
-		// TODO: THIS IS UTTER SHIT
+		// TODO:
 		// SRC
 		if (*src_ips_count == 0) {
 			src_ips[*src_ips_count].count = 1;
